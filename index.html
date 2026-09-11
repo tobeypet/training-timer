@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>訓練計時器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #12161d;
+    --bg-2: #191f28;
+    --text: #f2efe8;
+    --text-dim: #7c8494;
+    --line: #262d38;
+    --accent-train: #e8412b;
+    --accent-rest: #5fa777;
+    --accent-free: #4fa8d8;
+    --accent-danger: #ffc94d;
+    --accent: var(--accent-train);
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;width:100%;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  body.phase-train{--accent:var(--accent-train);}
+  body.phase-rest{--accent:var(--accent-rest);}
+  body.phase-free{--accent:var(--accent-free);}
+  body.phase-done{--accent:var(--text-dim);}
+
+  .stage{
+    height:100vh;width:100vw;
+    display:grid;
+    grid-template-rows:auto 1fr auto auto;
+    grid-template-areas:
+      "topbar"
+      "clock"
+      "next"
+      "bottom";
+    align-items:center;
+    padding:clamp(16px,3vh,40px) clamp(16px,4vw,60px);
+    gap:6px;
+  }
+
+  .topbar{
+    grid-area:topbar;
+    text-align:center;
+    display:flex;flex-direction:column;gap:6px;
+    transition:color .3s ease;
+    width:100%;
+  }
+  .event-name{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(28px,5vw,64px);
+    letter-spacing:0.04em;
+    color:var(--accent);
+    line-height:1;
+    transition:color .4s ease;
+  }
+  .phase-label{
+    font-size:clamp(13px,1.6vw,20px);
+    color:var(--text-dim);
+    font-weight:500;
+    letter-spacing:0.02em;
+  }
+
+  .clock-wrap{
+    grid-area:clock;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+    min-height:0;
+  }
+  .clock{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(90px,22vw,340px);
+    line-height:1;
+    letter-spacing:0.02em;
+    color:var(--text);
+    font-variant-numeric:tabular-nums;
+    transition:color .2s ease, transform .2s ease;
+  }
+  .clock.danger{
+    color:var(--accent-danger);
+    animation:pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.04);}
+  }
+
+  .next-preview{
+    grid-area:next;
+    text-align:center;
+    font-size:clamp(12px,1.4vw,16px);
+    color:var(--text-dim);
+    min-height:1.4em;
+    width:100%;
+  }
+  .next-preview b{color:var(--text);font-weight:600;}
+
+  .flash-overlay{
+    position:fixed;inset:0;
+    background:var(--accent);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .12s ease;
+    z-index:5;
+  }
+  .flash-overlay.on{opacity:0.22;}
+
+  .bottom{
+    grid-area:bottom;
+    width:100%;
+    display:flex;flex-direction:column;
+    align-items:center;
+    gap:clamp(14px,2.2vh,26px);
+  }
+
+  /* ---- rotate hint for phones held in portrait ---- */
+  .rotate-hint{
+    display:none;
+    position:fixed;inset:0;
+    z-index:50;
+    background:var(--bg);
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:18px;
+    text-align:center;
+    padding:24px;
+  }
+  .rotate-icon{
+    width:56px;height:34px;
+    border:3px solid var(--accent);
+    border-radius:6px;
+    animation:rotatePhone 1.6s ease-in-out infinite;
+  }
+  @keyframes rotatePhone{
+    0%,15%{transform:rotate(0deg);}
+    45%,60%{transform:rotate(90deg);}
+    100%{transform:rotate(90deg);}
+  }
+  .rotate-hint p{
+    font-size:16px;
+    color:var(--text);
+    font-weight:600;
+    margin:0;
+  }
+  .rotate-hint span{
+    font-size:13px;
+    color:var(--text-dim);
+  }
+  @media (orientation:portrait) and (pointer:coarse){
+    .rotate-hint{display:flex;}
+    .stage{display:none;}
+  }
+
+  /* ---- compact layout for phones held in landscape ---- */
+  @media (max-height:520px) and (orientation:landscape){
+    .stage{
+      grid-template-columns:1.15fr 1fr;
+      grid-template-rows:auto 1fr auto;
+      grid-template-areas:
+        "clock topbar"
+        "clock next"
+        "clock bottom";
+      padding:10px 18px;
+      gap:2px 22px;
+    }
+    .topbar{text-align:left;gap:2px;}
+    .event-name{font-size:clamp(18px,4.4vh,34px);}
+    .phase-label{font-size:clamp(10px,2vh,14px);}
+    .clock{font-size:clamp(52px,32vh,190px);}
+    .next-preview{text-align:left;font-size:clamp(10px,1.8vh,13px);min-height:0;}
+    .bottom{gap:8px;align-items:flex-start;}
+    .track{max-width:100%;justify-content:flex-start;gap:5px;}
+    .seg{max-width:34px;}
+    .seg-tag{font-size:8px;}
+    .seg-bar{height:4px;}
+    .controls{justify-content:flex-start;gap:8px;}
+    button{padding:8px 14px;font-size:12px;}
+  }
+
+  .track{
+    display:flex;
+    gap:8px;
+    width:100%;
+    max-width:900px;
+    justify-content:center;
+  }
+  .seg{
+    flex:1;
+    max-width:80px;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+  }
+  .seg-bar{
+    width:100%;
+    height:6px;
+    border-radius:3px;
+    background:var(--line);
+    overflow:hidden;
+    position:relative;
+  }
+  .seg-bar-fill{
+    position:absolute;left:0;top:0;bottom:0;
+    width:0%;
+    background:var(--text-dim);
+    border-radius:3px;
+    transition:width .3s linear;
+  }
+  .seg.done .seg-bar-fill{width:100%;background:var(--text-dim);}
+  .seg.active .seg-bar-fill{background:var(--accent);}
+  .seg-tag{
+    font-size:11px;
+    color:var(--text-dim);
+    letter-spacing:0.02em;
+  }
+  .seg.active .seg-tag{color:var(--accent);font-weight:600;}
+
+  .controls{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  button{
+    font-family:'Inter',sans-serif;
+    font-size:15px;
+    font-weight:600;
+    padding:12px 22px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:var(--bg-2);
+    color:var(--text);
+    cursor:pointer;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  button:hover{border-color:var(--accent);}
+  button:active{transform:translateY(1px);}
+  button.primary{
+    background:var(--accent);
+    color:#12161d;
+    border-color:var(--accent);
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+
+  .done-screen{
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+    text-align:center;
+  }
+  .done-screen.show{display:flex;}
+  .done-title{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(60px,10vw,140px);
+    color:var(--text-dim);
+    letter-spacing:0.03em;
+  }
+
+  @media (max-width: 640px){
+    .track{gap:5px;}
+    .seg{max-width:44px;}
+    .seg-tag{font-size:9px;}
+  }
+</style>
+</head>
+<body class="phase-train">
+
+<div class="flash-overlay" id="flash"></div>
+
+<div class="rotate-hint">
+  <div class="rotate-icon"></div>
+  <p>請將手機轉為橫向使用</p>
+  <span>橫放後畫面會自動切換</span>
+</div>
+
+<div class="stage">
+  <div class="topbar">
+    <div class="event-name" id="eventName">EVENT 1</div>
+    <div class="phase-label" id="phaseLabel">第 1 段訓練</div>
+  </div>
+
+  <div class="clock-wrap" id="clockWrap">
+    <div class="clock" id="clock">03:00</div>
+  </div>
+
+  <div class="next-preview" id="nextPreview">下一段：Event 1 · 第 2 段訓練（3:00）</div>
+
+  <div class="bottom">
+    <div class="track" id="track"></div>
+    <div class="controls">
+      <button class="primary" id="btnPlay">開始</button>
+      <button id="btnSkip">跳到下一段</button>
+      <button id="btnReset">重設</button>
+      <button id="btnFull">全螢幕</button>
+      <button id="btnEndFree" style="display:none;">結束訓練</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const phases = [
+    {event:'EVENT 1', label:'第 1 段訓練', type:'train', duration:180, endSound:'interval'},
+    {event:'EVENT 1', label:'第 2 段訓練', type:'train', duration:180, endSound:'interval'},
+    {event:'EVENT 1', label:'第 3 段訓練', type:'train', duration:240, endSound:'restBell'},
+    {event:'休息',     label:'休息時間',   type:'rest',  duration:300, endSound:'startBell'},
+    {event:'EVENT 2', label:'訓練',        type:'train', duration:600, endSound:'restBell'},
+    {event:'休息',     label:'休息時間',   type:'rest',  duration:300, endSound:'startBell'},
+    {event:'EVENT 3', label:'訓練',        type:'train', duration:600, endSound:'restBell'},
+    {event:'休息',     label:'休息時間',   type:'rest',  duration:300, endSound:'startBell'},
+    {event:'EVENT 4', label:'自由進行（無時間限制）', type:'free', duration:null, endSound:null},
+  ];
+  const tags = ['E1-1','E1-2','E1-3','休息','E2','休息','E3','休息','E4'];
+
+  let idx = 0;
+  let remaining = phases[0].duration;
+  let elapsedFree = 0;
+  let running = false;
+  let timerHandle = null;
+  let audioCtx = null;
+
+  const $ = id => document.getElementById(id);
+  const eventNameEl = $('eventName');
+  const phaseLabelEl = $('phaseLabel');
+  const clockEl = $('clock');
+  const nextPreviewEl = $('nextPreview');
+  const trackEl = $('track');
+  const btnPlay = $('btnPlay');
+  const btnSkip = $('btnSkip');
+  const btnReset = $('btnReset');
+  const btnFull = $('btnFull');
+  const btnEndFree = $('btnEndFree');
+  const flashEl = $('flash');
+
+  function buildTrack(){
+    trackEl.innerHTML = '';
+    phases.forEach((p, i) => {
+      const seg = document.createElement('div');
+      seg.className = 'seg';
+      seg.id = 'seg-' + i;
+      seg.innerHTML = '<div class="seg-bar"><div class="seg-bar-fill"></div></div><div class="seg-tag">' + tags[i] + '</div>';
+      trackEl.appendChild(seg);
+    });
+  }
+
+  function fmt(sec){
+    sec = Math.max(0, Math.round(sec));
+    const m = Math.floor(sec/60);
+    const s = sec%60;
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+
+  function updateTrackVisuals(){
+    phases.forEach((p,i) => {
+      const seg = $('seg-'+i);
+      seg.classList.remove('active','done');
+      const fill = seg.querySelector('.seg-bar-fill');
+      if(i < idx){
+        seg.classList.add('done');
+        fill.style.width = '100%';
+      } else if(i === idx){
+        seg.classList.add('active');
+        if(p.type === 'free'){
+          fill.style.width = '100%';
+        } else {
+          const pct = 100 - (remaining / p.duration * 100);
+          fill.style.width = Math.min(100,Math.max(0,pct)) + '%';
+        }
+      } else {
+        fill.style.width = '0%';
+      }
+    });
+  }
+
+  function render(){
+    const p = phases[idx];
+    if(!p){
+      showDone();
+      return;
+    }
+    document.body.className = 'phase-' + p.type;
+    eventNameEl.textContent = p.event;
+    phaseLabelEl.textContent = p.label;
+
+    if(p.type === 'free'){
+      clockEl.textContent = fmt(elapsedFree);
+      clockEl.classList.remove('danger');
+      btnEndFree.style.display = 'inline-block';
+      btnSkip.style.display = 'none';
+      nextPreviewEl.textContent = '沒有時間限制，結束後請按「結束訓練」';
+    } else {
+      clockEl.textContent = fmt(remaining);
+      clockEl.classList.toggle('danger', remaining <= 10 && remaining > 0 && running);
+      btnEndFree.style.display = 'none';
+      btnSkip.style.display = 'inline-block';
+      const next = phases[idx+1];
+      if(next){
+        const dur = next.duration ? '（' + fmt(next.duration) + '）' : '';
+        nextPreviewEl.innerHTML = '下一段：<b>' + next.event + ' · ' + next.label + '</b>' + dur;
+      } else {
+        nextPreviewEl.textContent = '';
+      }
+    }
+    updateTrackVisuals();
+  }
+
+  function showDone(){
+    document.body.className = 'phase-done';
+    eventNameEl.textContent = '訓練結束';
+    phaseLabelEl.textContent = '辛苦了！';
+    clockEl.textContent = '--:--';
+    clockEl.classList.remove('danger');
+    nextPreviewEl.textContent = '';
+    btnPlay.disabled = true;
+    btnSkip.disabled = true;
+    btnEndFree.style.display = 'none';
+    updateTrackVisuals();
+  }
+
+  // ---- audio ----
+  function ensureAudio(){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function tone(freq, startOffset, dur, gainVal){
+    const t0 = audioCtx.currentTime + startOffset;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(gainVal, t0 + 0.02);
+    gain.gain.linearRampToValueAtTime(0, t0 + dur);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+  function flash(){
+    flashEl.classList.add('on');
+    setTimeout(()=>flashEl.classList.remove('on'), 220);
+    setTimeout(()=>{flashEl.classList.add('on'); setTimeout(()=>flashEl.classList.remove('on'),220);}, 320);
+  }
+  function playSound(kind){
+    if(!kind) return;
+    ensureAudio();
+    if(kind === 'interval'){
+      tone(880, 0, 0.25, 0.3);
+    } else if(kind === 'restBell'){
+      tone(880, 0, 0.22, 0.3);
+      tone(660, 0.28, 0.22, 0.3);
+      tone(880, 0.56, 0.32, 0.3);
+    } else if(kind === 'startBell'){
+      tone(523, 0, 0.28, 0.3);
+      tone(784, 0.3, 0.4, 0.3);
+    }
+    flash();
+  }
+
+  // ---- timer loop ----
+  function tick(){
+    const p = phases[idx];
+    if(p.type === 'free'){
+      elapsedFree += 1;
+      render();
+      return;
+    }
+    remaining -= 1;
+    if(remaining <= 0){
+      playSound(p.endSound);
+      idx += 1;
+      if(idx >= phases.length){
+        render();
+        stop();
+        return;
+      }
+      const np = phases[idx];
+      remaining = np.duration || 0;
+      elapsedFree = 0;
+    }
+    render();
+  }
+
+  function start(){
+    ensureAudio();
+    running = true;
+    btnPlay.textContent = '暫停';
+    btnPlay.classList.add('primary');
+    timerHandle = setInterval(tick, 1000);
+  }
+  function stop(){
+    running = false;
+    btnPlay.textContent = '開始';
+    clearInterval(timerHandle);
+  }
+  function toggle(){
+    if(!phases[idx]) return;
+    running ? stop() : start();
+    render();
+  }
+
+  function skip(){
+    const p = phases[idx];
+    if(p && p.type !== 'free' && p.endSound){
+      playSound(p.endSound);
+    }
+    idx += 1;
+    elapsedFree = 0;
+    if(idx >= phases.length){
+      stop();
+      render();
+      return;
+    }
+    remaining = phases[idx].duration || 0;
+    render();
+  }
+
+  function reset(){
+    stop();
+    idx = 0;
+    remaining = phases[0].duration;
+    elapsedFree = 0;
+    btnPlay.disabled = false;
+    btnSkip.disabled = false;
+    render();
+  }
+
+  function endFree(){
+    stop();
+    idx = phases.length;
+    render();
+  }
+
+  function toggleFullscreen(){
+    if(!document.fullscreenElement){
+      document.documentElement.requestFullscreen().catch(()=>{});
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  btnPlay.addEventListener('click', toggle);
+  btnSkip.addEventListener('click', skip);
+  btnReset.addEventListener('click', reset);
+  btnFull.addEventListener('click', toggleFullscreen);
+  btnEndFree.addEventListener('click', endFree);
+
+  buildTrack();
+  render();
+})();
+</script>
+</body>
+</html>
